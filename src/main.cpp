@@ -3,8 +3,11 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <MFRC522.h>
+#include <SD.h>
 
 // ========== global variables ==========
+
+unsigned long timeSeconds = millis() / 1000; //time in seconds
 #define RFID_SS 5
 #define RFID_RST 22
 String authorizedUIDs[] = {"02 43 4F 05"};     // authorized UIDs (add more UIDs as needed)
@@ -17,6 +20,9 @@ unsigned long indicatorTime = 0;
 bool indicatorON = false;
 String lastUID = "";
 unsigned long lastScanTime = 0;
+
+const int chipSelect = 10;
+File dataFile;
 
 // functions
 
@@ -116,6 +122,18 @@ void setup() {
   //=========== LED code ===========
     pinMode(GREEN_LED, OUTPUT);
     pinMode(RED_LED, OUTPUT);
+
+  // Data Logging
+  Serial.println("Looking for SD card...");
+
+  if(SD.begin(chipSelect))
+  {
+    Serial.println("SD card found");
+  }
+  else
+  {
+    Serial.println("File not found");
+  }
 }
 
 void loop() {
@@ -130,5 +148,13 @@ void loop() {
   // ========== timer code ===========
   if (indicatorON == true && millis() - indicatorStart >= indicatorTime) {
     OnTimeExpired();
+  }
+
+  //Data logging
+  dataFile = SD.open("data.csv", FILE_WRITE);
+  if(dataFile)
+  {
+    dataFile.print(timeSeconds); 
+    //finished after, needs help requests, check-in, check-outs
   }
 }
