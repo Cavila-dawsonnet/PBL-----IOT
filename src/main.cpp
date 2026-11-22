@@ -28,6 +28,8 @@ const int chipSelect = 10;
 File dataFile;
 
 // ========== functions ==========
+    // check-in = OnOccupiedRoom
+    // check-out = OnFreeRoom
 
 String getUID(){    // returns the UID of the scanned card as a string
   String uid = "";
@@ -65,11 +67,13 @@ void printStatusByte() {
   Serial.println(statusByte, BIN);
 }
 
+// ============ CHECK-OUT ============
 void onFreeRoom() {
   Serial.println("ROOM IS FREE, YOU MAY ENTER");
   digitalWrite(GREEN_LED, LOW);
 }
 
+// ============ CHECK-IN ============
 void onOccupiedRoom(){
   Serial.println("ROOM IS OCCUPIED, DO NOT ENTER");
   digitalWrite(GREEN_LED, HIGH);
