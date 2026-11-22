@@ -7,12 +7,15 @@
 
 // ========== global variables ==========
 
-unsigned long timeSeconds = millis() / 1000; //time in seconds
+unsigned long timeSeconds = millis() /1000; // time in seconds
 #define RFID_SS 5
 #define RFID_RST 22
 String authorizedUIDs[] = {"02 43 4F 05"};     // authorized UIDs (add more UIDs as needed)
 int numAuthorized = 1; // number of authorized UIDs
 MFRC522 rfid(RFID_SS, RFID_RST);
+
+uint8_t statusByte = 0;
+#define BIT_OCCUPIED (1 << 0)
 #define GREEN_LED 25
 #define RED_LED 26
 unsigned long indicatorStart = 0;
@@ -24,7 +27,7 @@ unsigned long lastScanTime = 0;
 const int chipSelect = 10;
 File dataFile;
 
-// functions
+// ========== functions ==========
 
 String getUID(){    // returns the UID of the scanned card as a string
   String uid = "";
@@ -35,7 +38,7 @@ String getUID(){    // returns the UID of the scanned card as a string
     }
     uid = uid + String(rfid.uid.uidByte[i], HEX);
     if (i < rfid.uid.size - 1) {
-      uid = uid + "";
+      uid = uid + " ";
     }
   }
   uid.toUpperCase();
@@ -51,40 +54,35 @@ bool isAuthorized(String uid) {
   return false;
 }
 
-void statIndicatorTimer(unsigned long duration) {
+void startIndicatorTimer(unsigned long duration) {
   indicatorStart = millis();
   indicatorTime = duration;
   indicatorON = true;
 }
 
-void allIndicatorsOFF() {
-  digitalWrite(GREEN_LED, LOW);
-  digitalWrite(RED_LED, LOW);
+void printStatusByte() {
+  Serial.print("Status byte: ");
+  Serial.println(statusByte, BIN);
 }
 
 void onFreeRoom() {
   Serial.println("ROOM IS FREE, YOU MAY ENTER");
-  allIndicatorsOFF();
   digitalWrite(GREEN_LED, LOW);
-  statIndicatorTimer(2000);
 }
 
 void onOccupiedRoom(){
   Serial.println("ROOM IS OCCUPIED, DO NOT ENTER");
-  allIndicatorsOFF();
   digitalWrite(GREEN_LED, HIGH);
-  statIndicatorTimer(1000);
 }
 
 void onUnknownCard() {
   Serial.println("ACCESS DENIED, UNKNOWN CARD");
-  allIndicatorsOFF();
   digitalWrite(RED_LED, HIGH);
-  statIndicatorTimer(1000);
+  startIndicatorTimer(1000);
 }
 
 void OnTimeExpired() {
-  allIndicatorsOFF();
+  digitalWrite(RED_LED, LOW);
   indicatorON = false;
   Serial.println("READY");
 }
@@ -102,7 +100,13 @@ void onCardScanned(String uid) {    // called when a card is scanned
   Serial.println(uid);
 
   if (isAuthorized(uid) == true) {    // check if the card is authorized
-    onFreeRoom();
+    if ((statusByte & BIT_OCCUPIED) == 0) {
+      statusByte |= BIT_OCCUPIED;
+      onOccupiedRoom();
+    } else {
+      statusByte &= ~BIT_OCCUPIED;
+      onFreeRoom();
+    }
   } else {
     onUnknownCard();
   }
@@ -122,19 +126,20 @@ void setup() {
   //=========== LED code ===========
     pinMode(GREEN_LED, OUTPUT);
     pinMode(RED_LED, OUTPUT);
+    digitalWrite(GREEN_LED, LOW);
+    digitalWrite(RED_LED, LOW);
 
-  // Data Logging
-  Serial.println("Looking for SD card...");
+  // ========== data logging code ===========
+    Serial.println("Looking for SD card...");
 
-  if(SD.begin(chipSelect))
-  {
-    Serial.println("SD card found");
-  }
-  else
-  {
-    Serial.println("File not found");
-  }
+    if(SD.begin(chipSelect)) {
+      Serial.println("SD card found");
+    } else {
+      Serial.println("File not found");
+    }
 }
+
+
 
 void loop() {
   // ========== RFID code ===========
@@ -150,11 +155,10 @@ void loop() {
     OnTimeExpired();
   }
 
-  //Data logging
+  // ========== data logging code ===========
   dataFile = SD.open("data.csv", FILE_WRITE);
-  if(dataFile)
-  {
-    dataFile.print(timeSeconds); 
+  if (dataFile) {
+    dataFile.print(timeSeconds);
     //finished after, needs help requests, check-in, check-outs
   }
 }
