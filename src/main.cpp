@@ -160,9 +160,28 @@ void loop() {
   }
 
   // ========== data logging code ===========
-  dataFile = SD.open("data.csv", FILE_WRITE);
-  if (dataFile) {
-    dataFile.print(timeSeconds);
-    //finished after, needs help requests, check-in, check-outs
+  if(onOccupiedRoom || onFreeRoom)
+  {
+    dataFile = SD.open("data.csv", FILE_WRITE);
+
+    if(dataFile)
+    {
+      if(onOccupiedRoom)
+      {
+        dataFile.print("Check in at, ");
+        dataFile.println(timeSeconds);
+      }
+      if(onFreeRoom)
+      {
+        dataFile.print("Checked out at, ");
+        dataFile.println(timeSeconds);
+      }
+      dataFile.close();
+    }
+    else
+    {
+      Serial.println("Error! Could not find data.csv");
+    }
   }
+  //needs help requests
 }
