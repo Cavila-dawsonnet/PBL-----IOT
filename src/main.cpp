@@ -63,102 +63,55 @@ const char webpage[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="refresh" content="5">
-<title>ESP32 Environmental Monitor</title>
-<style>
-body{
-    font-family:Arial,sans-serif;
-    background:linear-gradient(135deg, #1E3C72, #2A5298);
-    color:white;
-    text-align:center;
-    margin:0;
-    padding:20px;
-}
-.container{
-    max-width:800px;
-    margin:auto;
-}
-.card{
-    background:rgba(255, 255, 255, 0.15);
-    padding:20px;
-    border-radius:15px;
-    margin-bottom: 20px;
-    box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.3);
-}
-.value{
-    font-size:36px;
-    font-weight:bold;
-    color:#FFD54F;
-}
-.grid {
-    display: flex;
-    justify-content: space-around;
-    flex-wrap: wrap;
-}
-.sub-card {
-    background: rgba(0, 0, 0, 0.2);
-    padding: 15px;
-    border-radius: 10px;
-    width: 40%;
-    margin-bottom: 15px;
-}
-button{
-    width:180px;
-    height:60px;
-    margin:10px;
-    font-size:20px;
-    border:none;
-    border-radius:10px;
-    cursor:pointer;
-}
-.on{
-    background:#4CAF50;
-    color:white;
-}
-.off{
-    background:#F44336;
-    color:white;
-}
-.info{
-    margin-top:20px;
-}
-</style>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Room Status</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; margin-top: 30px; }
+    .status { font-size: 2em; margin: 20px 0; font-weight: bold; }
+    .occupied { color: red; }
+    .free { color: green; }
+    .metrics { display: inline-block; text-align: left; font-size: 1.2em; line-height: 1.8; }
+  </style>
 </head>
 <body>
-<div class="container">
-<h1>🌎 ESP32 Environmental Monitor</h1>
+  <h1>Room Monitor</h1>
+  <div id="status" class="status">Loading...</div>
+  <div class="metrics">
+    <div><strong>Avg Temperature:</strong> <span id="temp">--</span> &deg;C</div>
+    <div><strong>Fan Level:</strong> <span id="fan">--</span></div>
+    <div><strong>Status Byte:</strong> <span id="byte">--</span></div>
+  </div>
 
-<div class="card">
-    <h2>Average Temperature</h2>
-    <p class="value">TEMP_PLACEHOLDER &deg;C</p>
-</div>
+  <script>
+    async function fetchData() {
+      try {
+        const response = await fetch('/data');
+        const data = await response.json();
 
-<div class="grid">
-    <div class="sub-card">
-        <h3>Room Status</h3>
-        <p class="value" style="font-size: 24px;">ROOM_STATUS_PLACEHOLDER</p>
-    </div>
-    <div class="sub-card">
-        <h3>Fan Level</h3>
-        <p class="value">FAN_LEVEL_PLACEHOLDER</p>
-    </div>
-</div>
+        const statusEl = document.getElementById('status');
+        if (data.occupied) {
+          statusEl.textContent = 'OCCUPIED';
+          statusEl.className = 'status occupied';
+        } else {
+          statusEl.textContent = 'FREE';
+          statusEl.className = 'status free';
+        }
 
-<div class="card">
-    <h3>System Status Byte (Hex/Bin)</h3>
-    <p style="font-family: monospace; font-size: 18px; color: #81D4FA;">STATUS_BYTE_PLACEHOLDER</p>
-</div>
+        document.getElementById('temp').textContent = data.avg_temperature.toFixed(1);
+        document.getElementById('fan').textContent = data.fan_level;
+        // Display status byte in both hex and binary format
+        document.getElementById('byte').textContent = 
+          '0x' + data.status_byte.toString(16).toUpperCase().padStart(2, '0') + 
+          ' (0b' + data.status_byte.toString(2).padStart(8, '0') + ')';
+      } catch (err) {
+        console.error('Error fetching /data:', err);
+      }
+    }
 
-<button class="on" onclick="location.href='/on'">LED ON</button>
-<button class="off" onclick="location.href='/off'">LED OFF</button>
-
-<div class="info">
-<p>SSID: ESP32_Lab7</p>
-<p>IP Address: 192.168.4.1</p>
-</div>
-</div>
+    // Fetch immediately on load, then every 2 seconds
+    fetchData();
+    setInterval(fetchData, 2000);
+  </script>
 </body>
 </html>
 )rawliteral";
