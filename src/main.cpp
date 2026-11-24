@@ -4,6 +4,10 @@
 #include <SPI.h>
 #include <MFRC522.h>
 #include <SD.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
 
 // ========== global variables ==========
 
@@ -26,6 +30,24 @@ unsigned long lastScanTime = 0;
 
 const int chipSelect = 10;
 File dataFile;
+
+Adafruit_BME280 bme;
+const int NUM_SAMPLES = 10;
+float tempSamples[NUM_SAMPLES];
+int sampleIndex = 0;
+int sampleCount = 0;
+float avgTemp = 0.0;
+unsigned long lastTempTime = 0;
+const unsigned long TEMP_INTERVAL = 2000; // 2 seconds
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+
+#define OLED_MOSI 11
+#define OLED_CLK 13
+#define OLED_DC 9
+#define OLED_CS 10
+#define OLED_RST 8
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RST, OLED_CS);
 
 // ========== functions ==========
     // check-in = OnOccupiedRoom
@@ -133,10 +155,10 @@ void setup() {
 
   //========== OLED Display setup ==========
     display.begin(SSD1306_SWITCHCAPVCC);
-    display.clearDisplay();
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.display();
+    display.clearDisplay(); // CLEAR DISPLAY
+    display.setTextSize(1); // SET TEXT SIZE
+    display.setTextColor(SSD1306_WHITE);  // SET TEXT COLOR
+    display.display();  // UPDATE DISPLAY
     
   //=========== RFID code ===========
     SPI.begin();
@@ -177,29 +199,55 @@ void loop() {
     OnTimeExpired();
   }
 
-  // ========== data logging code ===========
-  if(onOccupiedRoom || onFreeRoom)
-  {
-    dataFile = SD.open("data.csv", FILE_WRITE);
+  // ========== TEMP READING ===========
+    temperature = bme.readTemperature();
+    Serial.print("Temperature: ");
+    Serial.print(temperature);
+    Serial.println(" °C");
+    delay(2000); // wait 2 seconds before next reading
 
-    if(dataFile)
-    {
-      if(onOccupiedRoom)
-      {
-        dataFile.print("Check in at, ");
-        dataFile.println(timeSeconds);
-      }
-      if(onFreeRoom)
-      {
-        dataFile.print("Checked out at, ");
-        dataFile.println(timeSeconds);
-      }
-      dataFile.close();
+  // ========== OLED Display code ===========
+    display.clearDisplay();
+    display.setCursor(0, 0);
+
+  // ========== Display temperature ===========
+    display.print("Temp: ");
+    display.print(temperature);
+    display.println(" °C");
+  
+  // ========== Display room status ===========
+    display.println("Room Status: ");
+    if (statusByte & BIT_OCCUPIED) {
+      display.println("Occupied");
+    } else {
+      display.println("Free");
     }
-    else
+    display.display();
+
+
+  // ========== data logging code ===========
+    if(onOccupiedRoom || onFreeRoom)
     {
-      Serial.println("Error! Could not find data.csv");
+      dataFile = SD.open("data.csv", FILE_WRITE);
+
+      if(dataFile)
+      {
+        if(onOccupiedRoom)
+        {
+          dataFile.print("Check in at, ");
+          dataFile.println(timeSeconds);
+        }
+        if(onFreeRoom)
+        {
+          dataFile.print("Checked out at, ");
+          dataFile.println(timeSeconds);
+        }
+        dataFile.close();
+      }
+      else
+      {
+        Serial.println("Error! Could not find data.csv");
+      }
     }
-  }
-  //needs help requests
+    //needs help requests
 }
