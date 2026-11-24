@@ -8,8 +8,14 @@
 #include <Adafruit_BME280.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <WiFi.h>
+#include <WebServer.h> 
 
 // ========== global variables ==========
+
+//Wifi credentials
+const char* ssid = "Password";
+const char* password = "IoT_PBL";
 
 unsigned long timeSeconds = millis() /1000; // time in seconds
 #define RFID_SS 5
@@ -28,7 +34,7 @@ bool indicatorON = false;
 String lastUID = "";
 unsigned long lastScanTime = 0;
 
-const int chipSelect = 10;
+const int chipSelect = 2;
 File dataFile;
 
 Adafruit_BME280 bme;
@@ -45,9 +51,117 @@ const unsigned long TEMP_INTERVAL = 2000; // 2 seconds
 #define OLED_MOSI 11
 #define OLED_CLK 13
 #define OLED_DC 9
-#define OLED_CS 10
+#define OLED_CS 5
 #define OLED_RST 8
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RST, OLED_CS);
+
+//webserver
+WebServer server(80);
+
+const char webpage[] PROGMEM = R"rawliteral(
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="refresh" content="5">
+<title>ESP32 Environmental Monitor</title>
+<style>
+body{
+    font-family:Arial,sans-serif;
+    background:linear-gradient(135deg, #1E3C72, #2A5298);
+    color:white;
+    text-align:center;
+    margin:0;
+    padding:20px;
+}
+.container{
+    max-width:800px;
+    margin:auto;
+}
+.card{
+    background:rgba(255, 255, 255, 0.15);
+    padding:20px;
+    border-radius:15px;
+    margin-bottom: 20px;
+    box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.3);
+}
+.value{
+    font-size:36px;
+    font-weight:bold;
+    color:#FFD54F;
+}
+.grid {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+}
+.sub-card {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 15px;
+    border-radius: 10px;
+    width: 40%;
+    margin-bottom: 15px;
+}
+button{
+    width:180px;
+    height:60px;
+    margin:10px;
+    font-size:20px;
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
+}
+.on{
+    background:#4CAF50;
+    color:white;
+}
+.off{
+    background:#F44336;
+    color:white;
+}
+.info{
+    margin-top:20px;
+}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>🌎 ESP32 Environmental Monitor</h1>
+
+<div class="card">
+    <h2>Average Temperature</h2>
+    <p class="value">TEMP_PLACEHOLDER &deg;C</p>
+</div>
+
+<div class="grid">
+    <div class="sub-card">
+        <h3>Room Status</h3>
+        <p class="value" style="font-size: 24px;">ROOM_STATUS_PLACEHOLDER</p>
+    </div>
+    <div class="sub-card">
+        <h3>Fan Level</h3>
+        <p class="value">FAN_LEVEL_PLACEHOLDER</p>
+    </div>
+</div>
+
+<div class="card">
+    <h3>System Status Byte (Hex/Bin)</h3>
+    <p style="font-family: monospace; font-size: 18px; color: #81D4FA;">STATUS_BYTE_PLACEHOLDER</p>
+</div>
+
+<button class="on" onclick="location.href='/on'">LED ON</button>
+<button class="off" onclick="location.href='/off'">LED OFF</button>
+
+<div class="info">
+<p>SSID: ESP32_Lab7</p>
+<p>IP Address: 192.168.4.1</p>
+</div>
+</div>
+</body>
+</html>
+)rawliteral";
 
 // ========== functions ==========
     // check-in = OnOccupiedRoom
