@@ -119,7 +119,25 @@ void onCardScanned(String uid) {    // called when a card is scanned
 void setup() {
     Serial.begin(115200);
     Serial.println("Program started");
+    Wire.begin();
+    Serial.println("I2C started");
 
+  // ========== check if sensor is connected ==========
+    if (bme.begin(0x76))  {
+      Serial.println("BME280 Found at 0x76");
+    } else if (bme.begin(0x77)) {
+      Serial.println("BME280 Found at 0x77");
+    } else {
+      Serial.println("BME280 Not Found");
+    }
+
+  //========== OLED Display setup ==========
+    display.begin(SSD1306_SWITCHCAPVCC);
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setTextColor(SSD1306_WHITE);
+    display.display();
+    
   //=========== RFID code ===========
     SPI.begin();
     rfid.PCD_Init();
