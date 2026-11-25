@@ -9,33 +9,13 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <WiFi.h>
-#include <WebServer.h> 
+#include <HTTPServer.h>
 
 // ========== global variables ==========
 
 //Wifi credentials
 const char* ssid = "Password";
-const char* password = "IoT_PBL";
-
-unsigned long timeSeconds = millis() /1000; // time in seconds
-#define RFID_SS 5
-#define RFID_RST 22
-String authorizedUIDs[] = {"02 43 4F 05"};     // authorized UIDs (add more UIDs as needed)
-int numAuthorized = 1; // number of authorized UIDs
-MFRC522 rfid(RFID_SS, RFID_RST);
-
-uint8_t statusByte = 0;
-#define BIT_OCCUPIED (1 << 0)
-#define GREEN_LED 25
-#define RED_LED 26
-unsigned long indicatorStart = 0;
-unsigned long indicatorTime = 0;
-bool indicatorON = false;
-String lastUID = "";
-unsigned long lastScanTime = 0;
-
-const int chipSelect = 2;
-File dataFile;
+const char* password = "IoT_PBL"; 
 
 Adafruit_BME280 bme;
 const int NUM_SAMPLES = 10;
@@ -45,17 +25,34 @@ int sampleCount = 0;
 float avgTemp = 0.0;
 unsigned long lastTempTime = 0;
 const unsigned long TEMP_INTERVAL = 2000; // 2 seconds
+
+#define RFID_SS 5
+#define RFID_RST 27
+String authorizedUIDs[] = {"02 43 4F 05"};     // authorized UIDs (add more UIDs as needed)
+int numAuthorized = 1; // number of authorized UIDs
+MFRC522 rfid(RFID_SS, RFID_RST);
+String lastUID = "";
+unsigned long lastScanTime = 0;
+
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
+#define OLED_DC 2
+#define OLED_CS 15
+#define OLED_RST 4
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &SPI, OLED_DC, OLED_RST, OLED_CS);
 
-#define OLED_MOSI 11
-#define OLED_CLK 13
-#define OLED_DC 9
-#define OLED_CS 5
-#define OLED_RST 8
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, OLED_MOSI, OLED_CLK, OLED_DC, OLED_RST, OLED_CS);
+uint8_t statusByte = 0;
+#define BIT_OCCUPIED (1 << 0)
+#define GREEN_LED 25
+#define RED_LED 26
+unsigned long indicatorStart = 0;
+unsigned long indicatorTime = 0;
+bool indicatorON = false;
 
-//webserver
+unsigned long timeSeconds = millis() / 1000; // time in seconds since program start
+const int chipSelect = 10;
+
+//webserver 
 WebServer server(80);
 
 const char webpage[] PROGMEM = R"rawliteral(
@@ -116,11 +113,69 @@ const char webpage[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-// ========== functions ==========
-    // check-in = OnOccupiedRoom
-    // check-out = OnFreeRoom
+// ====== sensor and display functions
+float getAverage() {
+  if(sampleCount == 0) {
+    return 0.0;
+  }float sum = 0.0;
+  for (int i = 0; i < sampleCount; i++) {
+    sum = sum + tempSamples[i];
+  }
+  return sum / sampleCount;
+}
 
-String getUID(){    // returns the UID of the scanned card as a string
+void updateDisplay() {
+  display.clearDisplay();
+  display.setCursor(0, 0);
+
+  // DISPLAY ROOM STATUS
+  display.println("Room Status: ");
+  if (statusByte & BIT_OCCUPIED) {
+    display.println("Occupied");
+  } else {
+    display.println("Free");
+  }
+
+  // show alert if unknown card is scanned
+  if (indicatorON) {
+    display.println("ALERT: Access Denied");
+    display.println("UNKNOWN CARD!!!!");
+  }
+
+  // DISPLAY AVERAGE TEMP
+  display.println();
+  display.print("Avg Temp: ");
+  display.print(avgTemp, 1);
+  display.println(" C");
+
+  display.display();
+}
+
+void readTemp() {
+  float currentTemp = bme.readTemperature();
+
+  // store readings in array
+  tempSamples[sampleIndex] = currentTemp;
+  sampleIndex = (sampleIndex + 1) % NUM_SAMPLES;
+  if (sampleCount < NUM_SAMPLES) {
+    sampleCount++;
+  }
+
+  avgTemp = getAverage();
+
+  Serial.print("Temperature: ");
+  Serial.print(currentTemp);
+  Serial.print(" C | Avg (");
+  Serial.print(sampleCount);
+  Serial.print("): ");
+  Serial.print(avgTemp, 1);
+  Serial.println(" C");
+
+  updateDisplay();
+}
+
+// ====== RFID AND LED FUNCTIONS ======
+String getUID() {    // returns the UID of the scanned card as a string
   String uid = "";
 
   for (int i = 0; i < rfid.uid.size; i++) {
@@ -160,28 +215,32 @@ void printStatusByte() {
 void onFreeRoom() {
   Serial.println("ROOM IS FREE, YOU MAY ENTER");
   digitalWrite(GREEN_LED, LOW);
+  updateDisplay();
 }
 
 // ============ CHECK-IN ============
 void onOccupiedRoom(){
   Serial.println("ROOM IS OCCUPIED, DO NOT ENTER");
   digitalWrite(GREEN_LED, HIGH);
+  updateDisplay();
 }
 
 void onUnknownCard() {
   Serial.println("ACCESS DENIED, UNKNOWN CARD");
   digitalWrite(RED_LED, HIGH);
   startIndicatorTimer(1000);
+  updateDisplay();
 }
 
 void OnTimeExpired() {
   digitalWrite(RED_LED, LOW);
   indicatorON = false;
   Serial.println("READY");
+  updateDisplay();
 }
 
 void onCardScanned(String uid) {    // called when a card is scanned
-  if (uid == lastUID && millis() - lastScanTime <2000) {
+  if (uid == lastUID && millis() - lastScanTime < 2000) {
     Serial.println("Repeat ignored");
     return;
   }
@@ -200,6 +259,7 @@ void onCardScanned(String uid) {    // called when a card is scanned
       statusByte &= ~BIT_OCCUPIED;
       onFreeRoom();
     }
+    printStatusByte();
   } else {
     onUnknownCard();
   }
@@ -208,8 +268,10 @@ void onCardScanned(String uid) {    // called when a card is scanned
 void setup() {
     Serial.begin(115200);
     Serial.println("Program started");
+
     Wire.begin();
     Serial.println("I2C started");
+    SPI.begin();
 
   // ========== check if sensor is connected ==========
     if (bme.begin(0x76))  {
@@ -228,7 +290,6 @@ void setup() {
     display.display();  // UPDATE DISPLAY
     
   //=========== RFID code ===========
-    SPI.begin();
     rfid.PCD_Init();
     delay(10);
     rfid.PCD_DumpVersionToSerial();     // prints the firmware version
@@ -248,49 +309,31 @@ void setup() {
     } else {
       Serial.println("File not found");
     }
+
+  // first temp reading
+    readTemp();
+    lastTempTime = millis();
 }
-
-
 
 void loop() {
   // ========== RFID code ===========
-  if (rfid.PICC_IsNewCardPresent() == true && rfid.PICC_ReadCardSerial() == true){
-    String uid = getUID();
-    onCardScanned(uid);
-    rfid.PICC_HaltA();
-    rfid.PCD_StopCrypto1();
-  } 
-
-  // ========== timer code ===========
-  if (indicatorON == true && millis() - indicatorStart >= indicatorTime) {
-    OnTimeExpired();
-  }
-
-  // ========== TEMP READING ===========
-    temperature = bme.readTemperature();
-    Serial.print("Temperature: ");
-    Serial.print(temperature);
-    Serial.println(" °C");
-    delay(2000); // wait 2 seconds before next reading
-
-  // ========== OLED Display code ===========
-    display.clearDisplay();
-    display.setCursor(0, 0);
-
-  // ========== Display temperature ===========
-    display.print("Temp: ");
-    display.print(temperature);
-    display.println(" °C");
-  
-  // ========== Display room status ===========
-    display.println("Room Status: ");
-    if (statusByte & BIT_OCCUPIED) {
-      display.println("Occupied");
-    } else {
-      display.println("Free");
+    if (rfid.PICC_IsNewCardPresent() == true  && rfid.PICC_ReadCardSerial() == true) {
+      String uid = getUID();
+      onCardScanned(uid);
+      rfid.PICC_HaltA();
+      rfid.PCD_StopCrypto1();
     }
-    display.display();
 
+  // ========== red LED timer ===========
+    if (indicatorON && millis() - indicatorStart >= indicatorTime) {
+      OnTimeExpired();
+    }
+
+  // ========== temperature and OLED timer ===========
+    if (millis() - lastTempTime >= TEMP_INTERVAL) {
+      lastTempTime = millis();
+      readTemp();
+    }
 
   // ========== data logging code ===========
     if(onOccupiedRoom || onFreeRoom)
