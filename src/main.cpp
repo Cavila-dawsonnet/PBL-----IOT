@@ -9,7 +9,7 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <WiFi.h>
-#include <HTTPServer.h>
+#include <WebServer.h>
 
 // ========== global variables ==========
 
@@ -51,6 +51,7 @@ bool indicatorON = false;
 
 unsigned long timeSeconds = millis() / 1000; // time in seconds since program start
 const int chipSelect = 10;
+File dataFile;
 
 //webserver 
 WebServer server(80);
